@@ -1358,8 +1358,20 @@ document.addEventListener('click',e=>{
   let r;try{r=f(t.dataset,t,e);}catch(x){fail(x);return;}
   if(r&&r.then){UI.busy=true;document.documentElement.classList.add('busy');r.catch(fail).finally(()=>{UI.busy=false;document.documentElement.classList.remove('busy');});}
 },true);
+const activeDialog=()=>$('#overlay [role="dialog"]')||$('.sheet[role="dialog"]');
+const dialogButtons=d=>$$('button:not(:disabled),a[href]',d).filter(b=>b.tabIndex>=0&&b.getClientRects().length);
+const dialogFocus=new MutationObserver(()=>{
+  const d=activeDialog();
+  if(d&&!d.contains(document.activeElement)){const b=dialogButtons(d)[0];if(b)b.focus({preventScroll:true});}
+});
+dialogFocus.observe($('#app'),{childList:true,subtree:true});
+dialogFocus.observe($('#overlay'),{childList:true,subtree:true});
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){if(SP&&SP.done){spinClose();return;}if(UI.sheet){closeSheet();return;}}
+  if(e.key==='Tab'){
+    const d=activeDialog();
+    if(d){const bs=dialogButtons(d),i=bs.indexOf(document.activeElement);e.preventDefault();if(bs.length)bs[i<0?(e.shiftKey?bs.length-1:0):(i+(e.shiftKey?-1:1)+bs.length)%bs.length].focus({preventScroll:true});return;}
+  }
+  if(e.key==='Escape'){if(SP){if(SP.done)spinClose();else ACT['spin-skip']();return;}if(UI.sheet){closeSheet();return;}}
   if((e.key==='Enter'||e.key===' ')&&e.target.getAttribute&&e.target.getAttribute('role')==='button'){e.preventDefault();e.target.click();return;}
   if(BT&&!BT.playing&&BT.focus&&['1','2','3'].includes(e.key)){const b=$(`#sk-${BT.focus}-${+e.key-1}`);if(b&&!b.disabled)b.click();}
   if(BT&&!BT.playing&&e.key==='Enter'&&e.target===document.body){ACT.fight();}
