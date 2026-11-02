@@ -1,5 +1,4 @@
 /* USER INTERFACE */
-(function(){const l=document.createElement('link');l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap';document.head.appendChild(l);})();
 let FLOORS=[],CFG={},PLAYER=null,ROUNDS={rounds:[],cores:[],frontier:0,readAt:0};
 const PREF_KEY='hamster-tower-prefs';
 let PREF={};
@@ -36,7 +35,8 @@ async function api(path,body){
   let last;
   for(let i=0;i<3;i++){
     try{
-      const r=await fetch(API_BASE+path,init);
+      /* a stalled connection must not lock the buttons forever. Retrying is safe, every change carries a request id */
+      const r=await fetch(API_BASE+path,window.AbortSignal&&AbortSignal.timeout?Object.assign({signal:AbortSignal.timeout(20000)},init):init);
       const j=await r.json().catch(()=>({}));
       if(r.ok){if(j.session)setTicket(j.session);return j;}
       const e=new Error(j.error||'Something went wrong, please try again');e.status=r.status;e.data=j;
@@ -67,6 +67,7 @@ async function dev(op,args){
 function fail(e){
   if(e&&e.data&&e.data.state)applyState(e.data.state);
   if(e&&e.status===401){setTicket(null);PLAYER=null;G=null;BT=null;UI.sheet=null;UI.view='login';render();}
+  SND.play('deny');
   toast((e&&e.message)||'Something went wrong, please try again');
 }
 function toast(text){const old=$('.toast');if(old)old.remove();const d=document.createElement('div');d.className='toast';d.setAttribute('role','status');d.textContent=text;document.body.appendChild(d);setTimeout(()=>d.remove(),2200);}
@@ -83,10 +84,14 @@ function topBar(){
     <div class="grow"></div>
     <span class="pill num" title="Coins">${coin}${fmt(G.coins)}</span>
     <span class="pill num">Floor ${G.top}</span>
-    ${PLAYER&&PLAYER.trial?'<button class="trial-btn" data-act="sheet" data-type="trial">Test<span class="wide"> panel</span></button>':''}${PLAYER&&PLAYER.wallet?`<span class="who"><button class="who-addr num" data-act="copy" data-t="${PLAYER.name}" title="Copy ${PLAYER.name}" aria-label="Copy wallet address ${PLAYER.name}">${shortAddr(PLAYER.name)}</button><button class="who-out" data-act="logout">Sign out</button></span>`:'<button class="trial-btn" data-act="logout">Sign out</button>'}
+    ${soundBtn()}
+    ${PLAYER&&PLAYER.trial?'<button class="trial-btn" data-act="sheet" data-type="trial">Test<span class="wide"> panel</span></button>':''}${PLAYER&&PLAYER.wallet?`<span class="who"><button class="who-addr num" data-act="copy" data-t="${PLAYER.name}" title="Copy ${PLAYER.name}" aria-label="Copy wallet address ${PLAYER.name}">${shortAddr(PLAYER.name)}</button><button class="who-out" data-act="logout">Sign out</button></span>`:'<button class="trial-btn" data-act="sheet" data-type="guest">Guest</button>'}
   </div></header>`;
 }
 const shortAddr=a=>a.slice(0,6)+'...'+a.slice(-4);
+const soundIcon=()=>`<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M4 9.5v5h3.6L13 19V5L7.6 9.5H4z"/>${SND.on()?'<path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>':'<path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'}</svg>`;
+const soundLabel=()=>SND.on()?'Sound on, press to mute':'Sound off, press to turn on';
+const soundBtn=()=>`<button class="snd-btn${SND.on()?'':' off'}" data-act="sound" aria-pressed="${SND.on()}" aria-label="${soundLabel()}" title="${soundLabel()} (M)">${soundIcon()}</button>`;
 function navBar(){
   const eq=equippedUids(G);
   const merge=G.items.some(it=>!eq.has(it.uid)&&canMerge(G,it));
@@ -117,7 +122,8 @@ function walletList(){
 function sheetWallets(){
   const list=walletList();
   if(!list.length)return `<h2>Connect a wallet</h2><p>No wallet found in this browser.</p>
-    <p class="note">Install a browser wallet such as <a href="https://metamask.io/download/" target="_blank" rel="noopener noreferrer">MetaMask</a> or <a href="https://rabby.io/" target="_blank" rel="noopener noreferrer">Rabby</a>, then reload this page. On a phone, open this page in your wallet app's browser.</p>`;
+    <p class="note">Install a browser wallet such as <a href="https://metamask.io/download/" target="_blank" rel="noopener noreferrer">MetaMask</a> or <a href="https://rabby.io/" target="_blank" rel="noopener noreferrer">Rabby</a>, then reload this page. On a phone, open this page in your wallet app's browser.</p>
+    ${window.matchMedia&&matchMedia('(pointer:coarse)').matches?`<div class="btns"><a class="btn ghost sm" href="https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(location.href)}" rel="noopener noreferrer">Open in Trust Wallet</a></div>`:''}`;
   return `<h2>Connect a wallet</h2>
     <div class="wlist">${list.map((w,i)=>{
       const name=w.info.name||'Wallet',ok=/^data:image\/(svg\+xml|png|webp|jpeg|gif)[;,]/i.test(w.info.icon||'');
@@ -128,7 +134,7 @@ function sheetWallets(){
 /* a wallet may never answer, so this does not lock the page: picking another wallet or closing the list drops the attempt */
 async function pickWallet(i){
   const w=walletList()[i];if(!w)return;
-  const eth=w.provider,run=UI.walletRun=(UI.walletRun||0)+1;
+  const eth=w.provider,run=UI.walletRun=(UI.walletRun||0)+1,wasGuest=!!PLAYER&&!PLAYER.wallet;
   const live=()=>run===UI.walletRun&&UI.sheet&&UI.sheet.type==='wallets';
   UI.walletWait=i;render();
   try{
@@ -142,10 +148,11 @@ async function pickWallet(i){
     const hex='0x'+[...new TextEncoder().encode(n.message)].map(b=>b.toString(16).padStart(2,'0')).join('');
     const signature=await eth.request({method:'personal_sign',params:[hex,address]});
     if(!live())return;
-    await api('/api/auth/verify',{ticket:n.ticket,signature});
+    const v=await api('/api/auth/verify',{ticket:n.ticket,signature});
     if(!live())return;
     UI.sheet=null;UI.walletWait=null;
     await afterLogin();
+    if(wasGuest)toast(v.linked?'Saved. This wallet now holds your progress.':'This wallet already has a save, so that one is loaded.');
   }catch(e){
     if(!live())return;
     UI.walletWait=null;render();
@@ -160,6 +167,14 @@ function viewLogin(){
     <div class="btns"><button class="btn big" data-act="wallet">Sign in with wallet</button>${CFG.guest?'<button class="btn ghost" data-act="guest">Play as guest</button>':''}</div>
     <p class="note">You only sign a message. It costs nothing and sends no transaction.</p>
   </div></main>`;
+}
+/* a guest save has no way back once the session is gone, so signing out asks first and offers a wallet */
+function sheetGuest(){
+  return `<h2>${esc(PLAYER.name)}</h2>
+    <p>You are playing as a guest. This save lives only in this browser, so signing out or clearing the browser loses it for good.</p>
+    <div class="btns"><button class="btn" data-act="guest-save">Save it with a wallet</button></div>
+    <p class="note">You only sign a message. It costs nothing and sends no transaction. If the wallet already has a save, that save loads instead.</p>
+    <div class="btns"><button class="btn warn sm" data-act="logout">Sign out and lose this save</button></div>`;
 }
 const setBg=m=>{document.documentElement.dataset.bg=m;};
 function render(){
@@ -179,16 +194,19 @@ function render(){
   $$('canvas[data-map]').forEach(c=>{const n=FLOORS[+c.dataset.map-1];if(n)drawMap(c,n,.5);});
 }
 function openSheet(s){UI.sheet=s;UI.sheetIn=true;UI.feedAsk=null;UI.allAsk=null;render();}
-function closeSheet(){UI.sheet=null;UI.wipeAsk=false;UI.feedAsk=null;UI.allAsk=null;render();}
+function closeSheet(){UI.sheet=null;UI.wipeAsk=false;UI.feedAsk=null;UI.allAsk=null;render();focusOpener();}
+/* after a dialog closes, keyboard players continue from the button that opened it. The page was redrawn, so it is found again by its data */
+const openerKey=t=>(t.classList[0]?'.'+t.classList[0]:'')+Object.keys(t.dataset).filter(k=>k!=='tip').map(k=>`[data-${k}=${JSON.stringify(t.dataset[k])}]`).join('');
+function focusOpener(){if(UI.opener&&!activeDialog()){const el=$(UI.opener);if(el)el.focus({preventScroll:true});}}
 function sheetHTML(){
   const s=UI.sheet;
-  const inner={floor:sheetFloor,pet:sheetPet,gear:sheetGear,item:sheetItem,sweep:sheetSweep,trial:sheetTrial,wallets:sheetWallets}[s.type](s);
+  const inner={floor:sheetFloor,pet:sheetPet,gear:sheetGear,item:sheetItem,sweep:sheetSweep,trial:sheetTrial,wallets:sheetWallets,guest:sheetGuest}[s.type](s);
   return `<div class="sheet-wrap" data-act="close-bg"><div class="sheet s-${s.type}" role="dialog" aria-modal="true"><button class="x" data-act="close" aria-label="Close">×</button>${inner}</div></div>`;
 }
 
 /* TOWER SCREEN */
 function viewTower(){
-  const cur=curFloor(),can=canSweep(G,Date.now()),maxEnd=Math.ceil(FLOORS.length/10)*10;
+  const cur=curFloor(),can=canSweep(G,Date.now()),maxEnd=Math.ceil(FLOORS.length/10)*10,newest=FLOORS[FLOORS.length-1];
   const end=UI.block||Math.min(maxEnd,Math.ceil(cur/10)*10),a=end-9,b=Math.min(end,FLOORS.length);
   const rows=[];
   for(let f=b;f>=a;f--){
@@ -204,6 +222,7 @@ function viewTower(){
         <h1>The hamster runs, the tower grows</h1>
         <p>Every round with work on Squeekchain is a floor with its own map and weather. Fast runs become Zoomies floors, lazy runs become Easy floors, and long naps leave treasure chests behind.</p>
         <div class="btns">${allClear()?`<span class="pill">All ${FLOORS.length} floors cleared</span>`:`<button class="btn big" data-act="sheet" data-type="floor" data-f="${cur}">Climb floor ${cur}</button>`}<small class="num">Cleared ${G.top} of ${FLOORS.length} floors</small></div>
+        ${newest?`<small class="num hero-new">Newest floor ${newest.floor}: round ${newest.round}, ${newest.work} work, the hamster ran ${agoText(newest.t)}</small>`:''}
       </div>
       ${pic('wheel_big','Squeektoshi on the wheel','hero-pet')}
     </section>
@@ -263,7 +282,7 @@ function sheetFloor(s){
     <div class="info-row">${floorTags(n)}<small class="num">Round ${n.round}, ${n.work} work, ${dec(n.blocks)} blocks, ran at ${TIME_STR(n.t)}</small></div>
     ${n.type==='zoomies'?'<p class="hint">The hamster ran hard this round: stronger enemies, chests one tier higher.</p>':n.type==='sleepy'?'<p class="hint">The hamster was lazy this round: weaker enemies.</p>':''}
     <p class="hint">Weather, ${w.n}: ${w.d}</p>
-    <div class="sec-t">Enemies on this floor (hover a move for details)</div>
+    <div class="sec-t">Enemies on this floor (hover a move for details, on a phone press and hold)</div>
     <div class="stack" style="gap:8px">${n.enemies.map(id=>enemyCard(id)).join('')}</div>
     <div class="sec-t">Rewards</div>
     <dl class="kv"><dt>First clear</dt><dd>${fmt(b)} coins and ${nFirst} chests${plus?` (${plus} tier${plus>1?'s':''} higher)`:''}</dd>
@@ -322,7 +341,7 @@ function renderBattle(){
       <h1>${BT.sandbox?'Practice':'Floor '+B.node.floor}</h1>
       <div class="bt-tags">${BT.sandbox?'<span class="tag">No rewards</span>':floorTags(n)}<small class="num" id="rnd"></small></div>
       <div class="bt-order" id="order" aria-label="Turn order by Speed"></div>
-      <div class="bt-ctl"><button class="btn ghost sm" data-act="quality" id="qbtn" title="Effect quality">${lv===2?'High':lv===1?'Medium':'Low'}</button><button class="btn ghost sm" data-act="speed" id="spd">x${speed()}</button><button class="btn ghost sm" data-act="leave">Leave</button></div>
+      <div class="bt-ctl"><button class="btn ghost sm" data-act="quality" id="qbtn" title="Effect quality">${lv===2?'High':lv===1?'Medium':'Low'}</button><button class="btn ghost sm" data-act="speed" id="spd">x${speed()}</button>${soundBtn()}<button class="btn ghost sm" data-act="leave" id="leave">Leave</button></div>
     </div></header>
     <section class="stage t-${n.type}${n.boss?' is-boss':''} w-${w.w}" id="stage">
       <canvas class="map" id="mapc" aria-hidden="true"></canvas><div class="wx-tint"></div>
@@ -480,6 +499,7 @@ async function fxUse(e){
   BT.active=e.who;markSel();
   BT.melee=!!e.melee;
   say(e.who,e.name);
+  if(e.kind==='ult')SND.play('ult');else if(e.melee)SND.play('swing');else if(e.self)SND.play('buff');else SND.play('cast',e.el);
   if(e.kind==='ult'){
     const s=uById(BT.B,e.who),f=$('#field');
     if(f){const b=document.createElement('div');b.className='ultb';b.innerHTML=`${pic('pet_'+s.ref,'')}<strong>${e.name}</strong>`;f.appendChild(b);setTimeout(()=>b.remove(),560/speed());}
@@ -504,6 +524,7 @@ async function fxDmg(e){
   else if(e.eff>0)cls='eff';
   else if(e.eff<0)cls='weak';
   floatAt(e.to,text,cls,color);
+  if(e.key)SND.play('dot');else SND.play('hit',{shield:e.lost===0,crit:e.crit,eff:e.eff>0,weak:e.eff<0});
   if(!e.key&&spr(e.to))FX.hit(vpCenter(e.to),e.el?ELS[e.el].c:'#fff');
   await wait(e.key?110:130);
 }
@@ -515,6 +536,7 @@ async function fxReact(e){
     f.appendChild(b);setTimeout(()=>b.remove(),1200/speed());
   }
   flash(ELS[e.b].c,.4);shakeStage();
+  SND.play('react',{a:e.a,b:e.b});
   if(spr(e.to)){const c=vpCenter(e.to);FX.ring(c,ELS[e.a].c,10,90,8,420);FX.ring(c,ELS[e.b].c,10,70,6,380,60);FX.burst(c.x,c.y,ELS[e.b].c,10,260,'spark',8,420);}
   logLine(`Reaction ${r.n}. ${r.d}`);
   await wait(520);
@@ -524,22 +546,22 @@ const STEP={
   round:e=>{logLine(`Turn ${e.n}`);return null;},
   turn:e=>{BT.active=e.who;markSel();return null;},
   snap:e=>{applySnap(e);return null;},
-  miss:e=>{floatAt(e.to,e.why||'Dodge','small','#E6EEFF');return wait(170);},
-  heal:e=>{setHp(e.to,e.hp);floatAt(e.to,'+'+fmt(e.val),'heal');return wait(110);},
-  st:e=>{const u=snapU(e.to);if(e.key==='shield'){if(u&&e.sh!==undefined){u.sh=e.sh;syncUnit(u);}floatAt(e.to,'Shield','small','#BFD0FF');return wait(80);}
+  miss:e=>{SND.play('whiff');floatAt(e.to,e.why||'Dodge','small','#E6EEFF');return wait(170);},
+  heal:e=>{SND.play('heal');setHp(e.to,e.hp);floatAt(e.to,'+'+fmt(e.val),'heal');return wait(110);},
+  st:e=>{const u=snapU(e.to);if(e.key==='shield'){SND.play('shield');if(u&&e.sh!==undefined){u.sh=e.sh;syncUnit(u);}floatAt(e.to,'Shield','small','#BFD0FF');return wait(80);}
     if(u&&!u.st.find(x=>x.k===e.key)&&STS[e.key]){u.st.push({k:e.key,v:1,t:0});syncUnit(u);}
-    if(STS[e.key])floatAt(e.to,STS[e.key].n,'small',STS[e.key].c);return wait(90);},
-  dead:e=>{const u=snapU(e.who);if(u){u.alive=false;u.hp=0;syncUnit(u);}logLine(`${nameOf(e.who)} has fallen`);if(spr(e.who)){const c=vpCenter(e.who);FX.burst(c.x,c.y,'#C9C3DE',8,130,'dot',6,520,-40);}return wait(300);},
-  revive:e=>{const u=snapU(e.who);if(u){u.alive=true;u.hp=e.hp;u.st=[];u.mark=null;syncUnit(u);layoutUnits();}floatAt(e.who,e.name,'small','#8FE8B0');logLine(`${nameOf(e.who)}: ${e.name}`);return wait(400);},
-  charge:e=>{say(e.who,e.name);const u=snapU(e.who);if(u){u.charging=e.next;syncUnit(u);}const el=$('#u-'+e.who+' .intent');if(el){el.className='intent charge';el.textContent='Unleashing: '+e.next;}if(spr(e.who))FX.ring(vpCenter(e.who),'#F0506E',70,10,5,440);logLine(`${nameOf(e.who)}: ${e.name}. Next it unleashes ${e.next}`);return wait(440);},
-  phase:e=>{say(e.who,e.text,'phase');shakeStage();flash('#F0506E',.3);logLine(`${nameOf(e.who)}: ${e.text}`);return wait(860);},
-  skip:e=>{floatAt(e.who,e.why,'small','#FFE27A');logLine(`${nameOf(e.who)} loses its action: ${e.why}`);return wait(340);},
+    if(STS[e.key]){SND.play(STS[e.key].bad?'debuff':'buff');floatAt(e.to,STS[e.key].n,'small',STS[e.key].c);}return wait(90);},
+  dead:e=>{SND.play(uById(BT.B,e.who).boss?'bossfall':'fall');const u=snapU(e.who);if(u){u.alive=false;u.hp=0;syncUnit(u);}logLine(`${nameOf(e.who)} has fallen`);if(spr(e.who)){const c=vpCenter(e.who);FX.burst(c.x,c.y,'#C9C3DE',8,130,'dot',6,520,-40);}return wait(300);},
+  revive:e=>{SND.play('revive');const u=snapU(e.who);if(u){u.alive=true;u.hp=e.hp;u.st=[];u.mark=null;syncUnit(u);layoutUnits();}floatAt(e.who,e.name,'small','#8FE8B0');logLine(`${nameOf(e.who)}: ${e.name}`);return wait(400);},
+  charge:e=>{SND.play('charge');say(e.who,e.name);const u=snapU(e.who);if(u){u.charging=e.next;syncUnit(u);}const el=$('#u-'+e.who+' .intent');if(el){el.className='intent charge';el.textContent='Unleashing: '+e.next;}if(spr(e.who))FX.ring(vpCenter(e.who),'#F0506E',70,10,5,440);logLine(`${nameOf(e.who)}: ${e.name}. Next it unleashes ${e.next}`);return wait(440);},
+  phase:e=>{SND.play('phase');say(e.who,e.text,'phase');shakeStage();flash('#F0506E',.3);logLine(`${nameOf(e.who)}: ${e.text}`);return wait(860);},
+  skip:e=>{SND.play('debuff');floatAt(e.who,e.why,'small','#FFE27A');logLine(`${nameOf(e.who)} loses its action: ${e.why}`);return wait(340);},
   note:e=>{logLine(e.text);return wait(200);},
-  push:e=>{floatAt(e.to,'Pushed back','small','#8FC8FF');return wait(80);},
-  discharge:e=>{floatAt(e.to,'Discharge!','small','#FFC94D');if(spr(e.to)){const c=vpCenter(e.to);FX.bolt({x:c.x,y:c.y-120},c,'#FFE27A',6,240);}return wait(140);},
-  boom:e=>{if(spr(e.to)){const c=vpCenter(e.to);FX.ring(c,'#F8A838',10,90,10,360,0,1);FX.burst(c.x,c.y,'#F8A838',12,280,'dot',6,460);}return wait(140);},
+  push:e=>{SND.play('whiff');floatAt(e.to,'Pushed back','small','#8FC8FF');return wait(80);},
+  discharge:e=>{SND.play('zap');floatAt(e.to,'Discharge!','small','#FFC94D');if(spr(e.to)){const c=vpCenter(e.to);FX.bolt({x:c.x,y:c.y-120},c,'#FFE27A',6,240);}return wait(140);},
+  boom:e=>{SND.play('boom');if(spr(e.to)){const c=vpCenter(e.to);FX.ring(c,'#F8A838',10,90,10,360,0,1);FX.burst(c.x,c.y,'#F8A838',12,280,'dot',6,460);}return wait(140);},
   swap:()=>wait(100),
-  nrg:e=>{if(BT.snap)BT.snap.us.filter(u=>u.id[0]===e.side).forEach(u=>floatAt(u.id,'+Rage','small','#FFC94D'));return wait(110);},
+  nrg:e=>{SND.play('rage');if(BT.snap)BT.snap.us.filter(u=>u.id[0]===e.side).forEach(u=>floatAt(u.id,'+Rage','small','#FFC94D'));return wait(110);},
 };
 async function play(evs){
   const me=BT;me.playing=true;markSel();clearIntents();renderAim();renderPanel();
@@ -565,6 +587,7 @@ async function endBattle(){
   }
   if(BT!==b)return;
   UI.result=out;leaveBattle();UI.view='result';UI.block=null;render();window.scrollTo(0,0);
+  if(!out.error){SND.play(out.win?'win':'lose');if(out.win&&out.res&&out.res.coins)setTimeout(()=>SND.play('coins'),760);}
 }
 async function saveResult(out){
   try{
@@ -808,11 +831,13 @@ function petFloat(text,gold){
   return c;
 }
 function levelBurst(c,box){
+  SND.play('levelup');
   FX.ring(c,'#FFC94D',10,96,8,480);FX.rise(c,'up',{n:7,c:'#FFC94D',size:9,w:46});FX.burst(c.x,c.y,'#FFE27A',12,240,'spark',8,520);
   if(box)anim(box,[{transform:'scale(1)'},{transform:'scale(1.08)',offset:.4},{transform:'scale(1)'}],340);
 }
 function feedFx(id,before){
   const o=G.owned[id],now=fullRatio(o),bar=$('#fullbar i');
+  SND.play('munch');if(now>=1)setTimeout(()=>SND.play('full'),220);
   if(bar&&bar.animate&&!RM)bar.animate([{transform:`scaleX(${before})`},{transform:`scaleX(${now})`}],{duration:280,easing:'ease-out'});
   const c=petFloat(now>=1?'Full!':`+${Math.max(1,Math.round((now-before)*100))}%`,now>=1);
   if(c){if(now>=1)FX.ring(c,'#8FE8B0',10,80,7,420);FX.burst(c.x,c.y,'#8FE8B0',now>=1?12:5,now>=1?220:120,'dot',5,420,120);}
@@ -826,6 +851,7 @@ async function wheelRun(id){
     render();
     const up=r.lv>r.lv0,c=petFloat(up?`Level ${r.lv}!`:`+${fmt(r.xp)} XP`,up);
     if(c&&up)levelBurst(c,$('.sheet .p-pic'));
+    SND.play('luck',r.luck);
     toast(`${RUN_LUCK[r.luck].n}: +${fmt(r.xp)} XP${up?`, now level ${r.lv}`:''}`);
     return;
   }
@@ -841,6 +867,7 @@ function wheelShow(id,r,b){
   const run={wheel:true,done:false,anims:[],fin:()=>wheelDone(id,r,b,run)};
   SP=run;
   const wheel=$('#wrw'),pet=$('#wrp'),dur=2200+Math.min(1400,L.x*420);
+  SND.play('whirr',{d:dur/1000,hot});
   if(wheel.animate)run.anims.push(wheel.animate([{transform:'rotate(0deg)'},{transform:`rotate(${Math.round((3+L.x*5)*360)}deg)`}],{duration:dur,easing:'cubic-bezier(.32,.08,.2,1)',fill:'forwards'}));
   if(pet.animate)run.anims.push(pet.animate([{transform:'translateY(0) rotate(-4deg)'},{transform:'translateY(-9%) rotate(4deg)'},{transform:'translateY(0) rotate(-4deg)'}],{duration:Math.round(330/Math.sqrt(L.x)),iterations:Infinity}));
   /* XP climbs with the run, each level passed bursts on the spot */
@@ -861,6 +888,7 @@ function wheelShow(id,r,b){
 }
 function wheelDone(id,r,b,run){
   if(!run||run.done)return;run.done=true;
+  SND.stopLoop();SND.play('luck',r.luck);
   run.anims.forEach(a=>{try{a.cancel();}catch(e){}});
   const p=PETS[id],L=RUN_LUCK[r.luck],o=G.owned[id],up=r.lv>r.lv0,box=$('#wrres');
   const wheel=$('#wrw');if(wheel)wheel.style.transform=`rotate(${Math.round((3+L.x*5)*360)}deg)`;
@@ -883,6 +911,7 @@ async function trainRun(id){
     ${up?`<p class="fg-ok num">Level ${r.lv0} to ${r.lv}!</p><p class="note num">Power ${fmt(b.power)} to ${fmt(petPower(petStats(G,id)))}</p>`:''}
     <div class="btns" id="spbtns"><button class="btn" data-act="spin-close">Done</button></div></div>`;
   SP={wheel:true,done:true,anims:[]};
+  SND.play('luck',r.best);
   const q=$('.wr-stage').getBoundingClientRect(),c={x:q.left+q.width/2,y:q.top+q.height/2};
   if(up)levelBurst(c);else FX.burst(c.x,c.y,'#FFE27A',12,240,'spark',7,520);
 }
@@ -1009,13 +1038,17 @@ function reelOne(){
   const a=reel.animate([{transform:'translateX(0)'},{transform:`translateX(${-dist}px)`}],{duration:2300,easing:'cubic-bezier(.1,.72,.16,1)',fill:'forwards'});
   const run=SP;SP.anims.push(a);a.onfinish=()=>{if(SP===run)spinDone();};
   setTimeout(()=>{if(SP===run)spinDone();},2600);
+  /* one tick each time a cell passes the marker, so the sound slows down with the reel */
+  let cell=0;
+  const tick=()=>{if(SP!==run||run.done||!reel.isConnected)return;const k=Math.floor(-new DOMMatrixReadOnly(getComputedStyle(reel).transform).m41/cw);if(k!==cell){cell=k;SND.play('tick');}requestAnimationFrame(tick);};
+  tick();
 }
 function reelMany(){
   const {cfg,results}=SP,pool=[];for(let i=0;i<8;i++)pool.push(poolCell(cfg.mode,cfg.tier));
   $('#spbody').innerHTML=`<div class="minis">${results.map((r,i)=>{const cells=[];for(let k=0;k<7;k++)cells.push(pool[(i*3+k)%pool.length]);cells.push(resCell(r));return `<div class="mini" id="mini-${i}"><div class="mini-strip">${cells.map(cellHTML).join('')}</div></div>`;}).join('')}</div>`;
   let left=results.length;const run=SP;
   results.forEach((r,i)=>{
-    const m=$('#mini-'+i),st=m.firstElementChild,fin=()=>{m.classList.add('stop','r-'+resCell(r).rar);if(--left===0&&SP===run)spinDone();};
+    const m=$('#mini-'+i),st=m.firstElementChild,fin=()=>{m.classList.add('stop','r-'+resCell(r).rar);if(SP===run&&!run.done)SND.play('stop');if(--left===0&&SP===run)spinDone();};
     if(!st.animate){fin();return;}
     const a=st.animate([{transform:'translateY(0)'},{transform:`translateY(${-(7/8*100)}%)`}],{duration:620+i*120,easing:'cubic-bezier(.2,.7,.2,1)',fill:'forwards'});
     SP.anims.push(a);a.onfinish=fin;
@@ -1026,6 +1059,7 @@ function quickOpen(){
   const {cfg}=SP;
   $('#spbody').innerHTML=`<div class="quick">${pic(cfg.art,'')}</div>`;
   const q=$('.quick img');
+  SND.play('shake');
   if(q&&q.animate&&!RM){const a=q.animate([{transform:'rotate(0) scale(1)'},{transform:'rotate(-9deg) scale(1.08)'},{transform:'rotate(9deg) scale(1.14)'},{transform:'rotate(-6deg) scale(1.2)'},{transform:'rotate(0) scale(1.3)'}],{duration:520,easing:'ease-in'});const run=SP;SP.anims.push(a);a.onfinish=()=>{if(SP===run)spinDone();};setTimeout(()=>{if(SP===run)spinDone();},700);}
   else spinDone();
 }
@@ -1049,6 +1083,7 @@ function spinDone(){
   const again=cfg.canAgain&&cfg.canAgain();
   $('#spbtns').innerHTML=`${again?`<button class="btn" data-act="spin-again">${again}</button>`:''}${cfg.mode==='food'?'<button class="btn" data-act="spin-feed">Feed a hamster</button>':''}<button class="btn ghost" data-act="spin-close">Done</button>`;
   const r=body.getBoundingClientRect(),c={x:r.left+r.width/2,y:r.top+r.height/2};
+  SND.play(shown.length?'rev_'+best:'coin');if(coins&&shown.length)setTimeout(()=>SND.play('coin'),160);
   if(best==='l'){FX.ring(c,'#FFC94D',20,220,10,700);FX.burst(c.x,c.y,'#FFC94D',26,420,'star',10,900,80);}
   else if(best==='e'){FX.ring(c,'#C99BFF',20,180,8,600);FX.burst(c.x,c.y,'#C99BFF',18,340,'spark',9,760);}
   else FX.burst(c.x,c.y,'#FFE27A',10,240,'spark',7,520);
@@ -1064,7 +1099,7 @@ function revealCard(r,i){
   if(r.kind==='pet'){const p=PETS[r.id];return `<div class="rv r-${p.rar}" style="${d}">${picL('pet_'+r.id,p.n)}<b>${p.n}</b><em>${r.fresh?'New pet!':r.refund?'+'+fmt(r.refund)+' coins':'Now '+r.star+' stars'}</em></div>`;}
   const it=r.item;return `<div class="rv r-${it.rar}" style="${d}"><span class="i-pic">${picL(gearArt(it),itemName(it))}</span><b>${SETS[it.set].n} ${SLOTS[it.slot].n}</b><small style="color:var(--rc)">${RARS[it.rar].n}</small></div>`;
 }
-function spinClose(){SP=null;$('#overlay').innerHTML='';render();}
+function spinClose(){SND.stopLoop();SP=null;$('#overlay').innerHTML='';render();focusOpener();}
 const bagCfg=n=>({mode:'bag',art:'bag',title:k=>k===1?'Opening a blind bag':`Opening ${k} blind bags`,make:async()=>(await action('bag',{n})).results,canAgain:()=>G.coins>=BAG_COST?(n>1&&G.coins>=BAG_COST*n?`Open ${n} more`:'Open 1 more'):null,next:()=>bagCfg(G.coins>=BAG_COST*n?n:1)});
 const foodBagCfg=(t,n)=>{const b=FOOD_BAGS[t];return {mode:'food',tier:t,art:'fbag_'+b.id,title:k=>k===1?'Opening a '+b.n:`Opening ${k} ${b.n}s`,make:async()=>(await action('foodbag',{tier:t,n})).results,canAgain:()=>G.coins>=b.cost?(n>1&&G.coins>=b.cost*n?`Open ${n} more`:'Open 1 more'):null,next:()=>foodBagCfg(t,G.coins>=b.cost*n?n:1)};};
 const chestCfg=(t,n)=>({mode:'chest',tier:t,art:'chest_'+(t+1),title:k=>k===1?'Opening a '+CHESTS[t].n:`Opening ${k} ${CHESTS[t].n}s`,make:async()=>(await action('chest',{tier:t,n})).results,canAgain:()=>G.chests[t]>0?(G.chests[t]>=n&&n>1?`Open ${n} more`:'Open 1 more'):null,next:()=>chestCfg(t,G.chests[t]>=n?n:1)});
@@ -1086,12 +1121,13 @@ async function forgeRun(uid){
   const anm=(el,f,o)=>{if(el&&el.animate){const a=el.animate(f,o);SP.anims.push(a);return a;}return null;};
   anm(m[0],[{transform:'translate(0,0)',opacity:1},{transform:'translate(84px,0) scale(.6)',opacity:0}],{duration:430,easing:'ease-in',fill:'forwards'});
   anm(m[1],[{transform:'translate(0,0)',opacity:1},{transform:'translate(-84px,0) scale(.6)',opacity:0}],{duration:430,easing:'ease-in',fill:'forwards'});
-  [430,700,970].forEach((ms,i)=>{SP.timers.push(setTimeout(()=>{if(!SP||SP.done)return;anm(h,[{transform:'rotate(0)'},{transform:'rotate(-46deg)',offset:.5},{transform:'rotate(0)'}],{duration:240,easing:'ease-in'});const c=ctr();SP.timers.push(setTimeout(()=>{FX.burst(c.x,c.y,'#FFC94D',8+i*3,240,'spark',7,420);FX.ring(c,'#FFE27A',6,44+i*14,5,260);},120));},ms));});
+  [430,700,970].forEach((ms,i)=>{SP.timers.push(setTimeout(()=>{if(!SP||SP.done)return;anm(h,[{transform:'rotate(0)'},{transform:'rotate(-46deg)',offset:.5},{transform:'rotate(0)'}],{duration:240,easing:'ease-in'});const c=ctr();SP.timers.push(setTimeout(()=>{SND.play('hammer');FX.burst(c.x,c.y,'#FFC94D',8+i*3,240,'spark',7,420);FX.ring(c,'#FFE27A',6,44+i*14,5,260);},120));},ms));});
   SP.timers.push(setTimeout(()=>{if(SP&&!SP.done)SP.fin();},1300));
 }
 function forgeDone(r,uid){
   if(!SP||SP.done)return;SP.done=true;
   (SP.timers||[]).forEach(clearTimeout);
+  SND.play(r.ok?'forgeok':'forgeno');
   const main=$('#fgm'),box=$('#fgres'),it=itemByUid(G,uid);
   $$('.fg-mat').forEach(el=>{el.style.opacity=0;});
   if(main&&it&&r.ok)main.insertAdjacentHTML('beforeend',`<em>+${r.plus}</em>`);
@@ -1109,6 +1145,7 @@ async function forgeAll(){
   if(!n){toast('Nothing to merge yet');render();return;}
   $('#overlay').innerHTML=`<div class="spin forge" role="dialog" aria-modal="true"><h2>Merging everything</h2><div class="quick">${pic('anvil','')}</div><p class="big-coin num">${r.okN} succeeded, ${r.failN} failed</p><p class="note">A failed merge loses 2 materials. The main item stays as it was.</p><div class="btns" id="spbtns"><button class="btn" data-act="spin-close">Done</button></div></div>`;
   SP={forge:true,done:true,anims:[]};
+  SND.play(r.okN?'forgeok':'forgeno');
   const q=$('.quick');if(q){const b=q.getBoundingClientRect();FX.burst(b.left+b.width/2,b.top+b.height/2,'#FFC94D',18,300,'spark',8,620);}
 }
 
@@ -1208,13 +1245,14 @@ function codexRules(){
       <li>Melee attacks and many enemy attacks only reach the front row. The first pet in your team is the front row.</li>
       <li>Cleared floors stay cleared. Losing costs nothing, so replay as much as you like for coins and chests.</li>
       <li>Chests go to your inventory and open from there. Use Sweep once per day to collect rewards from cleared floors.</li>
-      <li>Coins buy food and blind bags in the Shop. Feed a hamster to 100% and run the wheel to earn levels.</li></ol></section>
+      <li>Coins buy food and blind bags in the Shop. Feed a hamster to 100% and run the wheel to earn levels.</li>
+      <li>On a keyboard, 1, 2 and 3 pick a skill, Enter fights, Tab moves between buttons, Escape closes or skips, and M turns the sound on or off.</li></ol></section>
     <section class="box"><h2>Element cycle</h2><div class="elwheel">${ks.map(k=>`<div class="elpair"><span>${pic('el_'+k,ELS[k].n)}${ELS[k].n}</span><i>beats</i><span>${pic('el_'+ELS[k].beats,ELS[ELS[k].beats].n)}${ELS[ELS[k].beats].n}</span></div>`).join('')}</div><p class="note">An advantage is 40% stronger, a disadvantage is 25% weaker.</p></section>
     <section class="box"><h2>Effects</h2><div class="st-list">${Object.keys(STS).map(k=>`<div><span class="chip" style="--c:${STS[k].c}">${STS[k].n}</span>${STS[k].d}</div>`).join('')}</div></section>
     <section class="box"><h2>Merge odds</h2><div class="rates-line num">${MERGE_RATE.map((p,i)=>`<span>Merge to +${i+1}: <b>${pct(p)}</b></span>`).join('')}</div></section>
     <section class="box"><h2>The hamster shapes the floors</h2><ul class="stack" style="gap:5px;font-size:13.5px;color:var(--soft)"><li>600 work or more makes a Zoomies floor: stronger enemies, chests one tier higher.</li><li>Under 300 work makes an Easy floor: weaker enemies.</li><li>A nap of 1 hour or more leaves a treasure chest.</li><li>Squeektoshi grows stronger with the work of the round being fought.</li><li>The round hash decides the enemies, map and weather, so everyone sees the same floor.</li></ul></section>
     <section class="box"><h2>Team bonuses</h2><div class="st-list">${RESON.map(r=>`<div><b>${r.n}.</b> ${r.d}</div>`).join('')}${TRIOS.map(t=>`<div><b>${t.n}</b> (${t.ids.map(i=>PETS[i].n).join(', ')}). ${t.d}</div>`).join('')}</div></section>
-    <section class="box"><h2>Data source</h2><p class="note num">${ROUNDS.rounds.length} rounds with work, read from Ethereum Sepolia, last read at ${TIME_STR(ROUNDS.readAt)}. New floors appear on their own when a new round is settled.</p>${ROUNDS.cores.map((c,i)=>`<div class="core-row"><small class="num">Floors ${c.from||'?'} to ${c.to||'?'}, ${i<ROUNDS.cores.length-1?'stopped SqueekCore contract':'live SqueekCore contract'}</small><p class="addr" id="core-addr-${i}">${c.core}</p><button class="btn ghost sm" data-act="copy" data-t="${c.core}" data-el="core-addr-${i}">Copy address</button></div>`).join('')}</section>`;
+    <section class="box"><h2>Data source</h2><p class="note num">${ROUNDS.rounds.length} rounds with work, read from Ethereum Sepolia, last read at ${TIME_STR(ROUNDS.readAt)}. New floors appear on their own when a new round is settled.</p>${ROUNDS.cores.map((c,i)=>`<div class="core-row"><small class="num">Floors ${c.from||'?'} to ${c.to||'?'}, ${i<ROUNDS.cores.length-1?'stopped SqueekCore contract':'live SqueekCore contract'}</small><p class="addr" id="core-addr-${i}">${c.core}</p><div class="btns"><button class="btn ghost sm" data-act="copy" data-t="${c.core}" data-el="core-addr-${i}">Copy address</button><a class="btn ghost sm" href="https://sepolia.etherscan.io/address/${c.core}" target="_blank" rel="noopener noreferrer">View on Etherscan</a></div></div>`).join('')}</section>`;
 }
 /* fullness per coin of a bag, and the average coins one level costs using the bag that suits that level */
 const bagFill=b=>FOODS_LIST.reduce((a,f)=>a+foodRate(b,f)/100*f.fill,0);
@@ -1272,7 +1310,10 @@ const ACT={
   close(){closeSheet();},
   'close-bg'(d,t,e){if(e.target===t)closeSheet();},
   block(d){UI.block=+d.e;render();},
-  async sweep(){const j=await action('sweep');if(j.r)openSheet({type:'sweep',r:j.r});else render();},
+  async sweep(){const j=await action('sweep');if(j.r){SND.play('coins');openSheet({type:'sweep',r:j.r});}else render();},
+  sound(){PREF.sound=!SND.on();savePref();$$('.snd-btn').forEach(b=>{b.classList.toggle('off',!SND.on());b.setAttribute('aria-pressed',SND.on());b.setAttribute('aria-label',soundLabel());b.title=soundLabel()+' (M)';b.innerHTML=soundIcon();});if(SND.on())SND.play('tap');else SND.stopLoop();},
+  reload(){location.reload();},
+  'guest-save'(){UI.walletWait=null;askWallets();openSheet({type:'wallets'});},
   async guest(){await api('/api/auth/guest',{});await afterLogin();},
   wallet(){UI.walletWait=null;askWallets();openSheet({type:'wallets'});},
   'wallet-pick'(d){pickWallet(+d.i);},
@@ -1283,10 +1324,18 @@ const ACT={
   pick(d){if(!BT||BT.playing)return;const i=+d.i;if(!canPick(BT.B,d.u,i))return;BT.plan[d.u].i=i;BT.focus=d.u;const sk=PETS[uById(BT.B,d.u).ref].skills[i];if(sk.tgt!=='foe')nextFocus();refreshPlan();},
   focus(d){if(!BT||BT.playing)return;const u=uById(BT.B,d.id);if(!u||!u.alive)return;BT.focus=d.id;refreshPlan();},
   target(d){if(!BT||BT.playing)return;const pl=BT.plan[BT.focus];if(!pl)return;pl.target=d.id;BT.lastT[BT.focus]=d.id;const sk=PETS[uById(BT.B,BT.focus).ref].skills[pl.i];if(sk.tgt==='foe')nextFocus();refreshPlan();},
-  fight(){if(!BT||BT.playing||BT.B.over)return;BT.plans.push(JSON.parse(JSON.stringify(BT.plan)));const ev=runRound(BT.B,BT.plan);play(ev);},
+  fight(){if(!BT||BT.playing||BT.B.over)return;SND.play('go');BT.plans.push(JSON.parse(JSON.stringify(BT.plan)));const ev=runRound(BT.B,BT.plan);play(ev);},
   speed(){PREF.speed=speed()>=3?1:speed()+1;savePref();const b=$('#spd');if(b)b.textContent='x'+speed();},
   quality(){const l=(FX.Q.level+2)%3;FX.setLevel(l,true);PREF.fxLevel=l;savePref();const b=$('#qbtn');if(b)b.textContent=l===2?'High':l===1?'Medium':'Low';WX.reseed();},
-  leave(){leaveBattle();UI.view='tower';render();window.scrollTo(0,0);},
+  /* once a turn has been fought, leaving by accident would lose the battle, so it takes a second tap */
+  leave(d,t){
+    if(BT&&BT.plans.length&&!UI.leaveAsk){
+      UI.leaveAsk=true;t.textContent='Tap again to leave';t.classList.add('warn');
+      setTimeout(()=>{UI.leaveAsk=false;const b=$('#leave');if(b){b.textContent='Leave';b.classList.remove('warn');}},2600);
+      return;
+    }
+    UI.leaveAsk=false;leaveBattle();UI.view='tower';render();window.scrollTo(0,0);
+  },
   'try'(d){UI.lastTry=d.id;return enterBattle(sandboxNode(d.id),{sandbox:true,salt:'practice'});},
   'try-again'(){UI.result=null;return enterBattle(sandboxNode(UI.lastTry),{sandbox:true,salt:'practice'+UI.tryN});},
   pet(d){openSheet({type:'pet',id:d.id});},
@@ -1310,8 +1359,8 @@ const ACT={
   async 'team-swap'(d){const i=G.team.indexOf(d.out);if(i>=0&&!G.team.includes(d.id)){const t=[...G.team];t[i]=d.id;await action('team',{team:t});}render();},
   async 'team-front'(d){const i=G.team.indexOf(d.id);if(i>0){const t=[...G.team];t[i]=t[0];t[0]=d.id;await action('team',{team:t});render();}},
   gear(d){UI.sheet={type:'gear',id:d.id,slot:d.slot};render();const s=$('.sheet');if(s)s.scrollTop=0;},
-  async equip(d){await action('equip',{id:d.id,uid:+d.uid});UI.sheet={type:'pet',id:d.id};render();},
-  async unequip(d){await action('unequip',{id:d.id,slot:d.slot});UI.sheet={type:'pet',id:d.id};render();},
+  async equip(d){await action('equip',{id:d.id,uid:+d.uid});SND.play('clink');UI.sheet={type:'pet',id:d.id};render();},
+  async unequip(d){await action('unequip',{id:d.id,slot:d.slot});SND.play('clink');UI.sheet={type:'pet',id:d.id};render();},
   bag(d){return runBatch(bagCfg(+d.n));},
   foodbag(d){return runBatch(foodBagCfg(+d.t,+d.n));},
   'spin-feed'(){spinClose();UI.view='team';openSheet({type:'pet',id:lowestTeamPet()});window.scrollTo(0,0);},
@@ -1328,14 +1377,14 @@ const ACT={
   'sell-t'(d){UI.sell[d.r]=!UI.sell[d.r];UI.sellAsk=false;render();},
   'sell-ask'(){UI.sellAsk=true;render();},
   'sell-no'(){UI.sellAsk=false;render();},
-  async 'sell-do'(){const r=await action('sell',{rars:RAR_ORDER.filter(x=>UI.sell[x])});UI.sellAsk=false;render();toast(`Sold ${r.count} items for ${fmt(r.coins)} coins`);},
+  async 'sell-do'(){const r=await action('sell',{rars:RAR_ORDER.filter(x=>UI.sell[x])});SND.play('coins');UI.sellAsk=false;render();toast(`Sold ${r.count} items for ${fmt(r.coins)} coins`);},
   'merge-all'(){return forgeAll();},
   inv(d){UI.invTab=d.k;render();},
   more(){UI.limit+=120;render();},
   filter(d){UI.filter=d.k;UI.limit=120;render();},
   item(d){openSheet({type:'item',uid:d.uid});},
-  async 'item-sell'(d){const j=await action('sell',{uid:+d.uid});UI.sheet=null;render();toast(`Sold for ${fmt(j.coins)} coins`);},
-  async 'equip-from-item'(d){await action('equip',{id:d.id,uid:+d.uid});render();toast(`${PETS[d.id].n} is now wearing it`);},
+  async 'item-sell'(d){const j=await action('sell',{uid:+d.uid});SND.play('coin');UI.sheet=null;render();toast(`Sold for ${fmt(j.coins)} coins`);},
+  async 'equip-from-item'(d){await action('equip',{id:d.id,uid:+d.uid});SND.play('clink');render();toast(`${PETS[d.id].n} is now wearing it`);},
   tab(d){UI.tab=d.k;render();window.scrollTo(0,0);},
   copy(d){const ok=()=>toast('Copied');const no=()=>{const el=$('#'+d.el);if(el){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);toast('Could not copy, the address is selected instead');}else toast('Could not copy: '+d.t);};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(d.t).then(ok,no);else no();},
   async 'tr-coins'(){await dev('coins');render();toast('Added 10,000 coins');},
@@ -1348,6 +1397,15 @@ const ACT={
   'tr-nowipe'(){UI.wipeAsk=false;render();},
   async 'tr-wipe2'(){await dev('wipe');UI.wipeAsk=false;UI.sheet=null;UI.view='tower';UI.block=null;render();window.scrollTo(0,0);toast('Erased, starting again from floor 1');},
 };
+/* these make their own sound, and a click on the dark area around a sheet may not be a press at all */
+const QUIET=new Set(['fight','sound','close-bg']);
+/* a quiet tick when the mouse reaches a tab or a button */
+let hoverEl=null;
+document.addEventListener('pointerover',e=>{
+  if(e.pointerType!=='mouse')return;
+  const a=e.target.closest&&e.target.closest('.nav button,.btn:not(:disabled),.snd-btn');
+  if(a!==hoverEl){hoverEl=a||null;if(a)SND.play('hover');}
+},{passive:true});
 document.addEventListener('click',e=>{
   if(TIP.long){TIP.long=false;e.preventDefault();e.stopPropagation();return;}
   const chip=e.target.closest&&e.target.closest('.chip[data-tip],.mark img[data-tip],.ord[data-tip]');
@@ -1355,21 +1413,26 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t||t.disabled)return;
   const f=ACT[t.dataset.act];if(!f)return;
   if(UI.busy&&t.dataset.act!=='close')return;
+  if(!t.closest('[role="dialog"]'))UI.opener=openerKey(t);
+  if(!QUIET.has(t.dataset.act))SND.play('tap');
   let r;try{r=f(t.dataset,t,e);}catch(x){fail(x);return;}
   if(r&&r.then){UI.busy=true;document.documentElement.classList.add('busy');r.catch(fail).finally(()=>{UI.busy=false;document.documentElement.classList.remove('busy');});}
 },true);
 const activeDialog=()=>$('#overlay [role="dialog"]')||$('.sheet[role="dialog"]');
-const dialogButtons=d=>$$('button:not(:disabled),a[href]',d).filter(b=>b.tabIndex>=0&&b.getClientRects().length);
+const dialogStops=d=>$$('button:not(:disabled),a[href],[tabindex]',d).filter(b=>b.tabIndex>=0&&b.getClientRects().length);
 const dialogFocus=new MutationObserver(()=>{
   const d=activeDialog();
-  if(d&&!d.contains(document.activeElement)){const b=dialogButtons(d)[0];if(b)b.focus({preventScroll:true});}
+  if(d&&!d.contains(document.activeElement)){const b=dialogStops(d)[0];if(b)b.focus({preventScroll:true});}
 });
 dialogFocus.observe($('#app'),{childList:true,subtree:true});
 dialogFocus.observe($('#overlay'),{childList:true,subtree:true});
 document.addEventListener('keydown',e=>{
+  /* holding a key must not close everything or keep buying */
+  if(e.repeat&&(e.key==='Escape'||e.key==='Enter'||e.key===' ')){e.preventDefault();return;}
+  if((e.key==='m'||e.key==='M')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.repeat){ACT.sound();return;}
   if(e.key==='Tab'){
     const d=activeDialog();
-    if(d){const bs=dialogButtons(d),i=bs.indexOf(document.activeElement);e.preventDefault();if(bs.length)bs[i<0?(e.shiftKey?bs.length-1:0):(i+(e.shiftKey?-1:1)+bs.length)%bs.length].focus({preventScroll:true});return;}
+    if(d){const bs=dialogStops(d),i=bs.indexOf(document.activeElement);e.preventDefault();if(bs.length)bs[i<0?(e.shiftKey?bs.length-1:0):(i+(e.shiftKey?-1:1)+bs.length)%bs.length].focus({preventScroll:true});return;}
   }
   if(e.key==='Escape'){if(SP){if(SP.done)spinClose();else ACT['spin-skip']();return;}if(UI.sheet){closeSheet();return;}}
   if((e.key==='Enter'||e.key===' ')&&e.target.getAttribute&&e.target.getAttribute('role')==='button'){e.preventDefault();e.target.click();return;}
@@ -1399,12 +1462,12 @@ async function boot(){
     CFG=c;
     try{await afterLogin();}catch(e){if(e.status===401){UI.view='login';render();}else throw e;}
   }catch(e){
-    $('#app').innerHTML=`<main class="login gut"><div class="login-box"><h1>The tower could not open</h1><p>${(e&&e.message)||'Something went wrong'}</p><div class="btns"><button class="btn" onclick="location.reload()">Try again</button></div></div></main>`;
+    $('#app').innerHTML=`<main class="login gut"><div class="login-box"><h1>The tower could not open</h1><p>${(e&&e.message)||'Something went wrong'}</p><div class="btns"><button class="btn" data-act="reload">Try again</button></div></div></main>`;
   }
   /* new floors: read through the CDN, so a crowd of players never reaches the database */
   setInterval(async()=>{
     if(BT||SP||!G)return;
-    try{const n=await loadRounds();if(n>0){toast(`The hamster ran again, the tower grew by ${n} floor${n>1?'s':''}`);if(UI.view==='tower'&&!UI.sheet)render();}}catch(e){}
+    try{const n=await loadRounds();if(n>0){SND.play('full');toast(`The hamster ran again, the tower grew by ${n} floor${n>1?'s':''}`);if(UI.view==='tower'&&!UI.sheet)render();}}catch(e){}
   },240000+Math.random()*120000);
 }
 boot();

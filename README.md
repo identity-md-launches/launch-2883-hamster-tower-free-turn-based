@@ -75,6 +75,12 @@ The client never receives the random state, so chest, bag, food and wheel result
 
 This does not stop bots. A script can play the game with valid moves, and one person can use many wallets. Rate limits and a minimum battle time slow this down but do not prevent it.
 
+## Sound and fonts
+
+Every sound is synthesized in `client/sound.js` with the Web Audio API, so there are no audio files and nothing to license. Browsers keep audio off until the first press, the speaker button or the M key mutes it, and the choice is remembered in the browser. `tests/flow.js` renders each sound without speakers and fails loudness checks if one goes silent or too loud.
+
+The fonts are Baloo 2 and Be Vietnam Pro, served from `public/fonts` under the SIL Open Font License, whose text sits next to them. Nothing is loaded from another site.
+
 ## Project layout
 
 ```

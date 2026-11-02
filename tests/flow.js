@@ -23,7 +23,7 @@
   }
   try{
     PREF.speed=3;
-    if(UI.view!=='login')await click('[data-act=logout]',300);
+    if(UI.view!=='login'){await ACT.logout();await nap(300);}
     seen.push('login view='+UI.view+' guest button='+!!qs('[data-act=guest]')+' wallet button='+!!qs('[data-act=wallet]'));
     const noWallet=()=>Object.assign(new Error('no'),{code:4001});
     dispatchEvent(new CustomEvent('eip6963:announceProvider',{detail:{info:{uuid:'t1',rdns:'test.one',name:'Test <b>One</b>',icon:'javascript:alert(1)'},provider:{request:async()=>{throw noWallet();}}}}));
@@ -105,9 +105,11 @@
       await enterBattle(sandboxNode(id),{sandbox:true,salt:'t'});
       const v3=await fight(40);
       seen.push(id+': '+v3);
-      if(UI.view==='battle')await click('[data-act=leave]');
+      if(UI.view==='battle'){await click('[data-act=leave]');if(UI.view==='battle')await click('[data-act=leave]');}
     }
     const cv=document.createElement('canvas');let mapOk=0;for(let t=0;t<MAP_NAMES.length;t++)for(let k=0;k<TONE_NAMES.length;k++){drawMap(cv,{hash:'0xmap'+t+k,map:{t,tone:k}},.25);mapOk++;}seen.push('maps drawn='+mapOk);
+    const peaks=[];for(const n of SND.names()){const c=new OfflineAudioContext(1,44100*3,44100);SND.renderInto(c,n,n==='cast'?'spark':undefined);const d=(await c.startRendering()).getChannelData(0);let p=0;for(let i=0;i<d.length;i++)p=Math.max(p,Math.abs(d[i]));peaks.push([n,p]);}
+    seen.push('sounds='+peaks.length+' silent='+JSON.stringify(peaks.filter(x=>x[1]<.006).map(x=>x[0]))+' too loud='+JSON.stringify(peaks.filter(x=>x[1]>.7).map(x=>x[0])));
     const fxNames=[...new Set(PETS_LIST.flatMap(p=>p.skills.map(s=>s.fx)).concat(MONS_LIST.concat(BOSS_LIST).flatMap(m=>m.moves.map(x=>autoFx(x,m.el)))))];
     seen.push('skill effects='+fxNames.length+' missing='+JSON.stringify(fxNames.filter(n=>!FX.names().includes(n))));
     UI.view='tower';UI.result=null;render();

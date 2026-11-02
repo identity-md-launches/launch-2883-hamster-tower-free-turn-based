@@ -1,3 +1,8 @@
+@font-face{font-family:'Baloo 2';font-style:normal;font-weight:600 800;font-display:swap;src:url(../fonts/baloo-2.woff2) format('woff2')}
+@font-face{font-family:'Be Vietnam Pro';font-style:normal;font-weight:400;font-display:swap;src:url(../fonts/be-vietnam-pro-400.woff2) format('woff2')}
+@font-face{font-family:'Be Vietnam Pro';font-style:normal;font-weight:500;font-display:swap;src:url(../fonts/be-vietnam-pro-500.woff2) format('woff2')}
+@font-face{font-family:'Be Vietnam Pro';font-style:normal;font-weight:600;font-display:swap;src:url(../fonts/be-vietnam-pro-600.woff2) format('woff2')}
+@font-face{font-family:'Be Vietnam Pro';font-style:normal;font-weight:700;font-display:swap;src:url(../fonts/be-vietnam-pro-700.woff2) format('woff2')}
 /* Layout: one column, mobile game style, thick ink stickers on the night bedroom of the hamster. One dark look only. */
 :root{
   color-scheme:dark;
@@ -72,6 +77,7 @@ small{font-size:12px;color:var(--muted)}
 .nav button{position:relative;display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 2px 6px;min-height:58px;font-weight:600;font-size:12px;color:var(--muted);border-radius:10px}
 .nav button img{width:32px;height:32px}
 .nav button.on{color:var(--gold)}
+.nav button img{transition:transform .18s cubic-bezier(.3,1.6,.6,1)}
 .nav button.on img{transform:translateY(-2px) scale(1.1)}
 .dot{position:absolute;top:5px;left:calc(50% + 11px);min-width:11px;height:11px;border-radius:50%;background:var(--red);border:2px solid var(--panel)}
 
@@ -138,8 +144,8 @@ small{font-size:12px;color:var(--muted)}
 .nap img{width:30px;height:30px}
 
 /* SHEETS */
-.sheet-wrap{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(10,8,24,.72);padding:max(14px,env(safe-area-inset-top,0px)) max(14px,env(safe-area-inset-right,0px)) max(14px,env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px))}
-.sheet{position:relative;width:100%;max-width:680px;max-height:100%;overflow-y:auto;background:var(--panel);border:4px solid var(--ink);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.sheet-wrap{overscroll-behavior:contain;position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(10,8,24,.72);padding:max(14px,env(safe-area-inset-top,0px)) max(14px,env(safe-area-inset-right,0px)) max(14px,env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px))}
+.sheet{overscroll-behavior:contain;position:relative;width:100%;max-width:680px;max-height:100%;overflow-y:auto;background:var(--panel);border:4px solid var(--ink);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:14px}
 .sheet.in{animation:pop .16s ease-out}
 @keyframes pop{from{transform:scale(.95) translateY(10px);opacity:.3}}
 .sheet h2{font-size:26px;padding-right:44px}
@@ -167,7 +173,7 @@ small{font-size:12px;color:var(--muted)}
 .bad{color:var(--pink)}
 
 /* BATTLE */
-.bt{min-height:100%;display:flex;flex-direction:column;background:var(--night)}
+.bt{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;background:var(--night)}
 .bt-top{background:var(--panel);border-bottom:3px solid var(--ink)}
 .bt-top-in{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding-block:7px;max-width:1160px;margin-inline:auto}
 .bt-top h1{font-size:25px}
@@ -599,7 +605,7 @@ button.ftile:hover:not(:disabled){background:var(--raise)}
 .ftile.none small{color:var(--muted)}
 .ftile .i-pic em{right:-5px;bottom:-5px;font-size:12px;min-width:20px;text-align:center}
 .mini-m{display:flex;flex-direction:column;gap:2px;width:100%;margin-top:2px}
-.mini-m i{display:block;height:5px;background:var(--ink);border-radius:3px;overflow:hidden}
+.mini-m i{display:block;height:5px;background:rgba(255,255,255,.16);border-radius:3px;overflow:hidden}
 .mini-m u{display:block;height:100%;transform-origin:left;text-decoration:none}
 .mini-m .mf u{background:var(--mint)}
 .mini-m .mx u{background:var(--sky)}
@@ -686,7 +692,8 @@ html.busy .btn:not(:disabled),html.busy .sk:not(:disabled){cursor:progress}
   .floor.is-boss .f-en img{width:38px;height:38px}
   .floor.is-boss .f-en img:first-child{width:50px;height:50px}
   .floor.current .f-st{padding:0 9px}
-  .brand{display:none}
+  .brand span{display:none}
+  .brand img{width:32px;height:32px}
   .pill{padding:3px 8px;font-size:13px}
   .trial-btn{padding:2px 7px}
   .wide{display:none}
@@ -716,6 +723,132 @@ html.busy .btn:not(:disabled),html.busy .sk:not(:disabled){cursor:progress}
   .login-box .btn.big{min-height:48px;font-size:18px;padding:4px 16px}
   .login-box .btn{min-height:44px;font-size:15px;padding:4px 12px}
 }
+@media (max-width:370px){.brand{display:none}}
+/* a boss this size covers its neighbours on a narrow screen */
+@media (max-width:560px){.field{--bigs:clamp(92px,25vw,116px)}}
+/* on a short phone the skills scroll, the Fight button stays in reach */
+@media (max-width:760px){.plan-foot{position:sticky;bottom:0;z-index:6;background:var(--panel);padding-block:6px max(4px,env(safe-area-inset-bottom,0px))}}
+@media (max-width:760px) and (max-height:720px){.plan-foot .hint{min-height:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}}
+/* a phone on its side: the battlefield on the left, the skills on the right, so nothing needs scrolling */
+@media (orientation:landscape) and (max-height:500px){
+  .bt{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);height:100vh;height:100dvh;min-height:0;overflow:hidden}
+  .bt-top{grid-column:1/-1}
+  .bt-top-in{flex-wrap:nowrap;padding-block:3px;max-width:none}
+  .bt-top h1{font-size:20px;white-space:nowrap}
+  .bt-tags{flex-wrap:nowrap}
+  .bt-tags small{display:none}
+  .bt-order{order:0;width:auto;margin-left:auto}
+  .bt-ctl{margin-left:0}
+  .bt-ctl .btn{min-height:34px;padding:2px 8px;font-size:13px}
+  .bt-ctl .snd-btn{width:34px;height:34px}
+  .stage{grid-column:1;grid-row:2/4;min-height:0;border-bottom:0;border-right:3px solid var(--ink)}
+  .stage>.gut{height:100%}
+  .field{height:100%;--back:clamp(58px,17vh,76px);--front:clamp(66px,20vh,88px);--bigs:clamp(84px,26vh,116px)}
+  .ticker{grid-column:2;grid-row:2;min-height:0;padding-block:3px}
+  .ticker span:nth-last-child(n+2){display:none}
+  .panel{grid-column:2;grid-row:3;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-block:4px 0}
+  .plan-rows{grid-template-columns:minmax(0,1fr);gap:4px}
+  .plan-row{flex-direction:row;align-items:center;gap:5px;padding:3px 5px}
+  .pl-head{flex:0 0 76px}
+  .pl-head img{width:24px;height:24px}
+  .pl-head b{font-size:11.5px}
+  .pl-head small{font-size:10px}
+  .pl-head .hp-t{display:none}
+  .pl-skills{flex:1 1 0}
+  .sk{min-height:38px}
+  .sk b{font-size:11px}
+  .sk em{font-size:10px}
+  .plan-foot{position:sticky;bottom:0;z-index:6;background:var(--panel);padding-block:4px}
+  .plan-foot .hint{font-size:11px;min-height:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+  .fight{min-width:84px;min-height:42px!important;font-size:17px!important}
+}
+
+/* SOUND BUTTON, WAITING BAR, NO JAVASCRIPT */
+.snd-btn{display:inline-flex;align-items:center;justify-content:center;flex:none;width:36px;height:36px;border:2px solid var(--line2);border-radius:9px;color:var(--cream)}
+.snd-btn.off{color:#8F89AE}
+.bt-ctl .snd-btn{width:40px;height:40px;border-radius:10px;background:var(--raise)}
+@media (max-width:760px){.bt-ctl .snd-btn{width:36px;height:36px}}
+.hero-new{color:var(--muted);line-height:1.3}
+a.btn{text-decoration:none}
+html.busy,html.busy button{cursor:progress}
+html.busy::after{content:"";position:fixed;inset:0 0 auto;height:3px;z-index:100;opacity:0;pointer-events:none;background:linear-gradient(90deg,transparent,var(--gold2),transparent) no-repeat;background-size:40% 100%;animation:busy 1s linear .35s infinite}
+@keyframes busy{from{opacity:1;background-position:-60% 0}to{opacity:1;background-position:160% 0}}
+.noscript{position:fixed;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:700 22px/1.3 var(--f-d);color:var(--cream)}
+
+/* HOVER: for a real mouse only, so a phone never keeps a stuck effect. Transform and opacity keep it cheap, and reduced motion turns the movement off below */
+.pcard,.item,.gslot,button.ftile,div.ftile,.pick-row,.bopt,.sk,.wrow,.sell-t,.chipb,.floor,.trial-btn,.who-addr,.who-out,.rk-copy,.x,.snd-btn,.brand,.pl-head,.nav button,.chest-card,.shop-card,.pod,.rank li,.en-card,.rv,.slot,.set-card,.rx,.mini-pet,.res-chip,.ord,.mv span,.chip,.sweep,.btn{transition:transform .15s ease,background-color .15s ease,border-color .15s ease,box-shadow .15s ease,color .15s ease,filter .15s ease}
+.pcard img.pp,.item .i-pic>img,.gslot img,.ftile .i-pic>img,.pick-row .i-pic>img,.slot-pic img,.chest-card>img,.shop-card>img,.wrow img,.pl-head img,.floor .f-en img,.sweep>img,.pod>img,.mini-pet img,.en-pic img,.rv img,.rv .i-pic img,.brand img,.unit .sprite>img{transition:transform .18s cubic-bezier(.3,1.6,.6,1),filter .15s ease}
+.btn:active:not(:disabled){transition-duration:.04s}
+@media (hover:hover) and (pointer:fine){
+  /* bottom tabs: a raised pill, a line under the name, and each picture moves its own way */
+  .nav button::after{content:"";position:absolute;left:50%;bottom:2px;width:28px;height:3px;border-radius:2px;background:var(--gold);transform:translateX(-50%) scaleX(0);transition:transform .18s ease}
+  .nav button:is(:hover,:focus-visible){background:var(--raise);color:var(--cream)}
+  .nav button.on:is(:hover,:focus-visible){color:var(--gold)}
+  .nav button:is(:hover,:focus-visible)::after,.nav button.on::after{transform:translateX(-50%) scaleX(1)}
+  .nav button:is(:hover,:focus-visible) img{transform:translateY(-3px) scale(1.16)}
+  .nav button:is(:hover,:focus-visible) .dot{transform:scale(1.25)}
+  .nav button[data-v=tower]:is(:hover,:focus-visible) img{animation:nv-rise .5s ease}
+  .nav button[data-v=team]:is(:hover,:focus-visible) img,.brand:hover img,.hero-pet:hover,.login-box>img:hover{animation:nv-wiggle .5s ease}
+  .nav button[data-v=shop]:is(:hover,:focus-visible) img{animation:nv-swing .55s ease}
+  .nav button[data-v=items]:is(:hover,:focus-visible) img{animation:nv-slash .45s ease;transform-origin:30% 80%}
+  .nav button[data-v=ranks]:is(:hover,:focus-visible) img,.pod:hover>img{animation:nv-shine .6s ease}
+  .nav button[data-v=codex]:is(:hover,:focus-visible) img{animation:nv-flip .55s ease}
+  /* buttons lift, and the bright ones catch a shine */
+  .btn{position:relative;overflow:hidden}
+  .btn:hover:not(:disabled){transform:translateY(-2px);filter:brightness(1.05);box-shadow:0 6px 0 var(--golddark),0 9px 16px rgba(0,0,0,.35)}
+  .btn.ghost:hover:not(:disabled){border-color:var(--gold2);box-shadow:0 6px 0 var(--ink),0 9px 16px rgba(0,0,0,.35)}
+  .btn.warn:hover:not(:disabled){box-shadow:0 6px 0 #8A2238,0 9px 16px rgba(0,0,0,.35)}
+  .btn:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 var(--golddark)}
+  .btn.ghost:active:not(:disabled){box-shadow:0 1px 0 var(--ink)}
+  .btn.warn:active:not(:disabled){box-shadow:0 1px 0 #8A2238}
+  .btn:not(.ghost):not(:disabled)::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:skewX(-20deg);pointer-events:none}
+  .btn:not(.ghost):not(:disabled):hover::after{animation:btn-shine .6s ease}
+  /* cards that open something rise and glow in their rarity color */
+  .pcard:hover,.item:hover,.gslot:hover,button.ftile:hover:not(:disabled),div.ftile:hover,.pick-row:hover,.bopt:hover:not(:disabled),.wrow:hover{transform:translateY(-3px);box-shadow:0 8px 18px rgba(0,0,0,.42),0 0 0 2px var(--rc,var(--gold2))}
+  .pcard:hover img.pp,.item:hover .i-pic>img:first-child,.gslot:hover img,button.ftile:hover:not(:disabled) .i-pic>img,div.ftile:hover .i-pic>img,.pick-row:hover .i-pic>img,.slot-pic:hover img,.wrow:hover img{transform:scale(1.12) rotate(-3deg)}
+  /* floors slide toward the mouse and their monsters look up */
+  .floor:hover{transform:translateX(4px);box-shadow:inset 4px 0 0 var(--gold2)}
+  .floor.locked:hover{transform:translateX(2px);box-shadow:inset 3px 0 0 var(--line2)}
+  .floor:not(.locked):hover .f-en img{transform:translateY(-3px) scale(1.08)}
+  .floor:hover .f-en img:nth-child(2){transition-delay:.04s}
+  .floor:hover .f-en img:nth-child(3){transition-delay:.08s}
+  .floor:not(.current):not(.locked):hover .f-st{color:var(--gold2)}
+  .floor.current:hover .f-st{transform:scale(1.06)}
+  /* battle */
+  .sk:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 6px 12px rgba(0,0,0,.36)}
+  .sk.ult:hover:not(:disabled){box-shadow:0 0 14px var(--gold2)}
+  .pl-head:hover{background:var(--raise)}
+  .pl-head:hover img{transform:scale(1.12)}
+  .unit:not(.dead):hover .sprite>img{transform:scale(1.06)}
+  .unit.e:not(.dead):hover .sprite>img{filter:drop-shadow(0 0 7px #F0506E)}
+  .unit.p:not(.dead):hover .sprite>img{filter:drop-shadow(0 0 7px var(--gold2))}
+  .ord:hover{transform:scale(1.16)}
+  .chip:hover{transform:scale(1.07);filter:brightness(1.15)}
+  /* cards that only show information get a lighter lift */
+  .chest-card:hover,.shop-card:hover,.pod:hover,.slot:hover,.en-card:hover,.rv:hover,.set-card:hover,.rx:hover,.mini-pet:hover,.sweep:hover{transform:translateY(-2px);box-shadow:0 7px 15px rgba(0,0,0,.32);border-color:var(--gold2)}
+  .chest-card:hover>img,.shop-card:hover>img,.sweep:hover>img,.en-card:hover .en-pic img,.mini-pet:hover img,.rv:hover img{transform:scale(1.1) rotate(-3deg)}
+  .rank li:hover{transform:translateX(3px);border-color:var(--gold2)}
+  .res-chip:hover{border-color:var(--gold2)}
+  /* small controls */
+  .chipb:hover:not(.on){transform:translateY(-1px);border-color:var(--gold2);color:var(--cream)}
+  .chipb.on:hover{filter:brightness(1.08)}
+  .sell-t:hover{transform:translateY(-2px);filter:brightness(1.15)}
+  .mv span[data-tip]:hover{background:var(--raise2);border-color:var(--gold2);color:var(--cream)}
+  .tag[data-tip]:hover{filter:brightness(1.14)}
+  .ft-n:hover{color:var(--gold2)}
+  .brand:hover{color:var(--gold2)}
+  .trial-btn:hover,.who-addr:hover,.rk-copy:hover{transform:translateY(-1px)}
+  .snd-btn:hover{transform:scale(1.08);border-color:var(--gold)}
+  .x:hover{transform:rotate(90deg);background:var(--raise2)}
+  a:not(.btn):hover{color:var(--gold2)}
+}
+@keyframes nv-rise{0%{transform:none}45%{transform:translateY(-8px) scale(1.2)}70%{transform:translateY(-1px) scale(1.08)}100%{transform:translateY(-3px) scale(1.16)}}
+@keyframes nv-wiggle{0%,100%{transform:translateY(-3px) scale(1.16) rotate(0)}25%{transform:translateY(-3px) scale(1.16) rotate(-11deg)}50%{transform:translateY(-3px) scale(1.16) rotate(10deg)}75%{transform:translateY(-3px) scale(1.16) rotate(-5deg)}}
+@keyframes nv-swing{0%{transform:none}35%{transform:translateY(-3px) scale(1.24,.98)}65%{transform:translateY(-5px) scale(1.08,1.22)}100%{transform:translateY(-3px) scale(1.16)}}
+@keyframes nv-slash{0%{transform:translateY(-3px) scale(1.16) rotate(0)}35%{transform:translateY(-3px) scale(1.16) rotate(-30deg)}70%{transform:translateY(-3px) scale(1.16) rotate(26deg)}100%{transform:translateY(-3px) scale(1.16) rotate(0)}}
+@keyframes nv-shine{0%{transform:none;filter:brightness(1)}40%{transform:translateY(-4px) scale(1.24) rotate(-7deg);filter:brightness(1.4)}100%{transform:translateY(-3px) scale(1.16);filter:brightness(1)}}
+@keyframes nv-flip{0%{transform:translateY(-3px) scale(1.16) rotateY(0)}100%{transform:translateY(-3px) scale(1.16) rotateY(360deg)}}
+@keyframes btn-shine{to{left:130%}}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
