@@ -5,7 +5,6 @@ node_modules/
 .env.*.local
 .vercel/
 shots/
-dist/
 public/app/
 public/index.html
 lib/engine.generated.cjs
